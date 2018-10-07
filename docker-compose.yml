@@ -1,0 +1,12 @@
+version: "2"
+
+services:
+  jupyter:
+    build: .
+    expose:
+     - 8888
+    network_mode:
+      host
+    volumes:
+      - ./notebooks:/opt/notebooks
+      - ./datasets:/opt/datasets
