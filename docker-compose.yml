@@ -10,3 +10,5 @@ services:
     volumes:
       - ./notebooks:/opt/notebooks
       - ./datasets:/opt/datasets
+      - ./modules:/opt/modules
+      - ./clq:/opt/clq
