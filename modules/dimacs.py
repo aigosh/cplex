@@ -2,21 +2,21 @@ from networkx import Graph
 
 
 class DIMACS:
-    __graph = None
+    __graph: Graph = None
     __description = ''
     __vertices_num = 0
     __edges_num = 0
 
-    def graph(self):
+    def graph(self) -> Graph:
         return self.__graph
 
-    def description(self):
+    def description(self) -> str:
         return self.__description
 
-    def vertices_num(self):
+    def vertices_num(self) -> int:
         return self.__vertices_num
 
-    def edges_num(self):
+    def edges_num(self) -> int:
         return self.__edges_num
 
     def __init__(self, filepath):
@@ -34,11 +34,11 @@ class DIMACS:
                 continue
 
             if line_type == 'p':
-                (self.__vertices_num, self.__edges_num) = content.split()[1:]
+                (self.__vertices_num, self.__edges_num) = [int(x) for x in content.split()[1:]]
                 continue
 
             if line_type == 'e':
-                edge = content.split(' ', 1)
+                edge = [int(x) for x in content.split(' ', 1)]
                 edges.append(edge)
 
         self.__graph = Graph(edges)
