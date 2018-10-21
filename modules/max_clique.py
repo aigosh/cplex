@@ -2,6 +2,7 @@ from cplex import Cplex
 # from docplex i
 from dimacs import DIMACS
 from math import floor
+from time import time
 
 problem_type = Cplex.problem_type
 
@@ -13,6 +14,7 @@ class MaxCliqueSolver:
     __problem = None
     __heuristics = []
     __optimization_problem = None
+    __silent = False
 
     def __init__(self, problem, heuristics=None):
         """
@@ -121,26 +123,105 @@ class MaxCliqueSolver:
     #
     #         self.__resolve_max_clique(clique + [node], new_candidates[i:])
 
-    def solve(self):
-        self.__apply_heuristics(self.__heuristics)
+    def __resolve_max_clique(self, problem, nodes):
+        """
 
-        # nodes = self.__get_sorted_nodes()
-        # self.__resolve_max_clique([], nodes)
-
-        problem = self.__optimization_problem
-
+        :type problem: Cplex
+        """
         problem.solve()
+
+
         opt_point = problem.solution.get_values()
         solution = problem.solution.get_objective_value()
 
         upper_bound = floor(solution)
         print(solution, upper_bound, opt_point)
 
-        # if upper_bound <= self.__max_clique_len:
-        #     return self.__max_clique_len
-        #
-        # for value in opt_point:
-        #     if not value.is_integer():
-        #         val = floor(value)
+        if upper_bound <= self.__max_clique_len:
+            return self.__max_clique, self.__max_clique_len
 
-        return self.__max_clique_len
+        if upper_bound == solution:
+            clique = [i for i in range(0, len(opt_point)) if opt_point[i] == 1]
+            self.__max_clique = clique
+            self.__max_clique_len = len(clique)
+
+            return
+
+        for node in nodes:
+            index = node - 1
+            value = opt_point[index]
+            if value != round(value):
+                val = floor(value)
+
+                variables = problem.variables.get_names()
+                variable = variables[index]
+
+                new_problem = self.__clone_problem(problem)
+                new_problem.linear_constraints.add(names=[variable],
+                                                   lin_expr=[[[variable], [1]]],
+                                                   senses=['L'],
+                                                   rhs=[val])
+                try:
+                    self.__resolve_max_clique(new_problem, nodes)
+                except:
+                    pass
+
+                new_problem = self.__clone_problem(problem)
+                new_problem.linear_constraints.add(names=[variable],
+                                                   lin_expr=[[[variable], [1]]],
+                                                   senses=['G'],
+                                                   rhs=[val + 1])
+                try:
+                    self.__resolve_max_clique(new_problem, nodes)
+                except:
+                    pass
+
+    def __configure_problem(self, problem):
+        """
+
+        :type problem: Cplex
+        """
+        if self.__silent:
+            problem.set_log_stream(None)
+            problem.set_warning_stream(None)
+            problem.set_error_stream(None)
+            problem.set_results_stream(None)
+
+    def __clone_problem(self, problem):
+        """
+
+        :type problem: Cplex
+        """
+        new_problem = Cplex()
+
+        new_problem.set_problem_type(problem.get_problem_type())
+        new_problem.objective.set_sense(problem.objective.get_sense())
+        new_problem.variables.add(names=problem.variables.get_names(), obj=problem.objective.get_linear())
+        new_problem.linear_constraints.add(lin_expr=problem.linear_constraints.get_rows(),
+                                           names=problem.linear_constraints.get_names(),
+                                           rhs=problem.linear_constraints.get_rhs(),
+                                           senses=problem.linear_constraints.get_senses())
+        self.__configure_problem(new_problem)
+
+        return new_problem
+
+    def solve(self, silent=False):
+        self.__silent = silent
+
+
+        self.__apply_heuristics(self.__heuristics)
+        self.__configure_problem(self.__optimization_problem)
+
+        nodes = self.__get_sorted_nodes()
+
+        start_time = time()
+
+        try:
+            self.__resolve_max_clique(self.__optimization_problem, nodes)
+        except:
+            pass
+
+        end_time = time()
+        duration = start_time - end_time
+
+        return self.__max_clique, self.__max_clique_len, duration
