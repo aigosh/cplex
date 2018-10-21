@@ -1,5 +1,4 @@
 from cplex import Cplex
-from docplex.cp.solver import solver
 from dimacs import DIMACS
 from math import floor
 
