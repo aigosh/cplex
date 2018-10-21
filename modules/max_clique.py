@@ -1,4 +1,5 @@
 from cplex import Cplex
+# from docplex i
 from dimacs import DIMACS
 from math import floor
 
@@ -35,6 +36,7 @@ class MaxCliqueSolver:
         return self.__problem.graph()
 
     def __init_optimization_problem(self):
+
         problem = Cplex()
         problem.set_problem_type(problem_type.LP)
 
@@ -42,14 +44,15 @@ class MaxCliqueSolver:
         problem.objective.set_sense(sense=sense.maximize)
 
         variables = self.__build_variables()
-        print('Variables:', variables)
+        print('Variables: ', variables)
 
         objective = self.__build_objective(variables)
-        print('Objective:', objective)
+        print('Objective: ', objective)
 
         problem.variables.add(names=variables, obj=objective)
 
         constraints = self.__build_constraints(variables)
+        print('Constraints count: ', len(constraints))
         self.__set_constraints(problem, constraints)
 
         self.__optimization_problem = problem
@@ -63,9 +66,10 @@ class MaxCliqueSolver:
         for i in range(0, self.__problem.vertices_num()):
             constraint = [[variables[i]], [1], 'L', 1]
             constraints.append(constraint)
-            for j in range(0, self.__problem.vertices_num()):
+            for j in range(i, self.__problem.vertices_num()):
                 if i != j and not self.__graph().has_edge(i, j):
                     constraint = [[variables[i], variables[j]], [1, 1], 'L', 1]
+                    print('Constraint: ', constraint)
                     constraints.append(constraint)
 
         return constraints
