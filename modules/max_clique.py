@@ -1,4 +1,5 @@
 from cplex import Cplex
+from docplex.cp.solver import solver
 from dimacs import DIMACS
 from math import floor
 
@@ -26,6 +27,8 @@ class MaxCliqueSolver:
         self.__heuristics = heuristics
         self.__problem = problem
         self.__upper_bound = problem.vertices_num()
+
+        self.__init_optimization_problem()
 
         # print(self.__heuristics)
 
@@ -59,9 +62,11 @@ class MaxCliqueSolver:
         constraints = []
 
         for i in range(0, self.__problem.vertices_num()):
+            constraint = [[variables[i]], [1], 'L', 1]
+            constraints.append(constraint)
             for j in range(0, self.__problem.vertices_num()):
                 if i != j and not self.__graph().has_edge(i, j):
-                    constraint = [variables[[i, j]], [1, 1], 'L', 1]
+                    constraint = [[variables[i], variables[j]], [1, 1], 'L', 1]
                     constraints.append(constraint)
 
         return constraints
@@ -98,20 +103,20 @@ class MaxCliqueSolver:
 
         return self.__max_clique, self.__max_clique_len
 
-    def __resolve_max_clique(self, clique, candidates):
-        upper_bound = len(clique) + len(candidates)
-
-        if upper_bound < self.__max_clique_len:
-            return
-
-        node = candidates[0]
-        new_candidates = list(filter(lambda x: self.__graph().has_edge(node, x), candidates[1:]))
-
-        for i in range(0, len(new_candidates)):
-            if upper_bound - i < self.__max_clique_len:
-                return
-
-            self.__resolve_max_clique(clique + [node], new_candidates[i:])
+    # def __resolve_max_clique(self, clique, candidates):
+    #     upper_bound = len(clique) + len(candidates)
+    #
+    #     if upper_bound < self.__max_clique_len:
+    #         return
+    #
+    #     node = candidates[0]
+    #     new_candidates = list(filter(lambda x: self.__graph().has_edge(node, x), candidates[1:]))
+    #
+    #     for i in range(0, len(new_candidates)):
+    #         if upper_bound - i < self.__max_clique_len:
+    #             return
+    #
+    #         self.__resolve_max_clique(clique + [node], new_candidates[i:])
 
     def solve(self):
         self.__apply_heuristics(self.__heuristics)
@@ -126,12 +131,13 @@ class MaxCliqueSolver:
         solution = problem.solution.get_objective_value()
 
         upper_bound = floor(solution)
+        print(solution, upper_bound, opt_point)
 
-        if upper_bound <= self.__max_clique_len:
-            return self.__max_clique_len
-
-        for value in opt_point:
-            if not value.is_integer():
-                val = floor(value)
+        # if upper_bound <= self.__max_clique_len:
+        #     return self.__max_clique_len
+        #
+        # for value in opt_point:
+        #     if not value.is_integer():
+        #         val = floor(value)
 
         return self.__max_clique_len
