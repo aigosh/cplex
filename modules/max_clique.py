@@ -3,6 +3,7 @@ from cplex import Cplex
 from dimacs import DIMACS
 from math import floor
 from time import time
+import sys
 
 problem_type = Cplex.problem_type
 
@@ -30,10 +31,6 @@ class MaxCliqueSolver:
         self.__problem = problem
         self.__upper_bound = problem.vertices_num()
 
-        self.__init_optimization_problem()
-
-        # print(self.__heuristics)
-
     def __graph(self):
         return self.__problem.graph()
 
@@ -46,15 +43,15 @@ class MaxCliqueSolver:
         problem.objective.set_sense(sense=sense.maximize)
 
         variables = self.__build_variables()
-        print('Variables: ', variables)
+        self.__log('Variables: ', variables)
 
         objective = self.__build_objective(variables)
-        print('Objective: ', objective)
+        self.__log('Objective: ', objective)
 
         problem.variables.add(names=variables, obj=objective)
 
         constraints = self.__build_constraints(variables)
-        print('Constraints count: ', len(constraints))
+        self.__log('Constraints count: ', len(constraints))
         self.__set_constraints(problem, constraints)
 
         self.__optimization_problem = problem
@@ -71,7 +68,7 @@ class MaxCliqueSolver:
             for j in range(i, self.__problem.vertices_num()):
                 if i != j and not self.__graph().has_edge(i, j):
                     constraint = [[variables[i], variables[j]], [1, 1], 'L', 1]
-                    print('Constraint: ', constraint)
+                    self.__log('Constraint: ', constraint)
                     constraints.append(constraint)
 
         return constraints
@@ -92,7 +89,7 @@ class MaxCliqueSolver:
             sign = constraint[2]  # знак
             rh = constraint[3]  # правая часть ограничения
 
-            problem.linear_constraints.add(names=['constraint' + str(i)], lin_expr=[lh], senses=[sign], rhs=[rh])
+            problem.linear_constraints.add(names=[str(time())], lin_expr=[lh], senses=[sign], rhs=[rh])
 
     def __get_sorted_nodes(self):
         graph = self.__graph()
@@ -101,7 +98,7 @@ class MaxCliqueSolver:
 
     def __apply_heuristics(self, heuristics):
         result = [heuristic(self.__problem.graph()) for heuristic in heuristics]
-        print(result)
+        self.__log(result)
 
         self.__max_clique = max(result, key=len)
         self.__max_clique_len = len(self.__max_clique)
@@ -123,6 +120,20 @@ class MaxCliqueSolver:
     #
     #         self.__resolve_max_clique(clique + [node], new_candidates[i:])
 
+    def __update_max_clique(self, opt_point):
+        clique = []
+
+        for i in range(0, len(opt_point)):
+            if opt_point[i] != round(opt_point[i]):
+                return False
+            if opt_point[i] == 1:
+                clique.append(i)
+
+        self.__max_clique = clique
+        self.__max_clique_len = len(clique)
+
+        return True
+
     def __resolve_max_clique(self, problem, nodes):
         """
 
@@ -130,21 +141,16 @@ class MaxCliqueSolver:
         """
         problem.solve()
 
-
         opt_point = problem.solution.get_values()
         solution = problem.solution.get_objective_value()
 
         upper_bound = floor(solution)
-        print(solution, upper_bound, opt_point)
+        self.__log(solution, upper_bound, opt_point,)
 
         if upper_bound <= self.__max_clique_len:
-            return self.__max_clique, self.__max_clique_len
+            return
 
-        if upper_bound == solution:
-            clique = [i for i in range(0, len(opt_point)) if opt_point[i] == 1]
-            self.__max_clique = clique
-            self.__max_clique_len = len(clique)
-
+        if self.__update_max_clique(opt_point):
             return
 
         for node in nodes:
@@ -157,24 +163,26 @@ class MaxCliqueSolver:
                 variable = variables[index]
 
                 new_problem = self.__clone_problem(problem)
-                new_problem.linear_constraints.add(names=[variable],
+                new_problem.linear_constraints.add(names=[str(time())],
                                                    lin_expr=[[[variable], [1]]],
                                                    senses=['L'],
                                                    rhs=[val])
                 try:
                     self.__resolve_max_clique(new_problem, nodes)
                 except:
-                    pass
+                    self.__log("Unexpected error:", sys.exc_info()[0], force=True)
 
                 new_problem = self.__clone_problem(problem)
-                new_problem.linear_constraints.add(names=[variable],
+                new_problem.linear_constraints.add(names=[str(time())],
                                                    lin_expr=[[[variable], [1]]],
                                                    senses=['G'],
                                                    rhs=[val + 1])
                 try:
                     self.__resolve_max_clique(new_problem, nodes)
                 except:
-                    pass
+                    self.__log("Unexpected error:", sys.exc_info()[0], force=True)
+        self.__log('Max clique: ', self.__max_clique, force=True)
+        self.__log('Max clique length: ', self.__max_clique_len, force=True)
 
     def __configure_problem(self, problem):
         """
@@ -201,27 +209,36 @@ class MaxCliqueSolver:
                                            names=problem.linear_constraints.get_names(),
                                            rhs=problem.linear_constraints.get_rhs(),
                                            senses=problem.linear_constraints.get_senses())
+        print(new_problem.linear_constraints.get_rows(), '\n')
         self.__configure_problem(new_problem)
 
         return new_problem
 
+    def __log(self, *strings, force=False):
+        if not self.__silent or force:
+            print(*strings)
+
     def solve(self, silent=False):
         self.__silent = silent
-
+        if not self.__optimization_problem:
+            self.__init_optimization_problem()
+            self.__configure_problem(self.__optimization_problem)
 
         self.__apply_heuristics(self.__heuristics)
-        self.__configure_problem(self.__optimization_problem)
 
         nodes = self.__get_sorted_nodes()
 
         start_time = time()
+        self.__log('Start time: ', start_time)
 
         try:
             self.__resolve_max_clique(self.__optimization_problem, nodes)
         except:
-            pass
+            self.__log("Unexpected error:", sys.exc_info()[0], force=True)
 
         end_time = time()
-        duration = start_time - end_time
+        self.__log(end_time)
+
+        duration = end_time - start_time
 
         return self.__max_clique, self.__max_clique_len, duration
