@@ -1,5 +1,5 @@
 import sys
-from os import path, curdir
+from os import path, curdir, scandir
 
 def Common_nodes(l1,l2):
     intersection = []
@@ -14,25 +14,25 @@ def clique_heur (G, nodes):
     clique=[]
     kandidates=nodes
     clique.append(kandidates[d])
-    print(kandidates)
+    # print(kandidates)
     spisok_vershin=list(G.neighbors(kandidates[d]))
-    print('vershina ', kandidates[d], list(G.neighbors(kandidates[d])))
+    # print('vershina ', kandidates[d], list(G.neighbors(kandidates[d])))
     kandidates.pop(d)
     #print (kandidates)
 
     while len(spisok_vershin)!=0:
-        print(spisok_vershin)
+        # print(spisok_vershin)
 
         for i in range(len(kandidates)):
             if spisok_vershin.count(kandidates[i])!=0:
                 break
-        print('vershina ', kandidates[i], list(G.neighbors(kandidates[i])))
-        print(kandidates[i])
+        # print('vershina ', kandidates[i], list(G.neighbors(kandidates[i])))
+        # print(kandidates[i])
         spisok_vershin=Common_nodes(spisok_vershin,list(G.neighbors(kandidates[i])))
-        print(spisok_vershin)
+        # print(spisok_vershin)
         clique.append(kandidates[i])
         kandidates.pop(i)
-    print (clique)
+    # print (clique)
     return clique
 
 if __name__ == '__main__':
@@ -43,10 +43,16 @@ if __name__ == '__main__':
     from max_clique import MaxCliqueSolver
 
     clq_dir = path.join(curdir, '../clq')
-    problem_path = path.join(clq_dir, 'MANN_a9.clq')
-    problem = DIMACS(problem_path)
+    # problem_path = path.join(clq_dir, 'c-fat200-2.clq')
+    # problem = DIMACS(problem_path)
 
-    print(problem.description())
+    # print(problem.description())
 
-    solver = MaxCliqueSolver(problem, [clique_heur])
-    solver.solve(silent=True)
+    files = scandir(clq_dir)
+
+    for file in files:
+        problem_path = path.join(clq_dir, file)
+        problem = DIMACS(problem_path)
+        print(problem.description())
+        solver = MaxCliqueSolver(problem, [clique_heur])
+        print(file, solver.solve(silent=True))

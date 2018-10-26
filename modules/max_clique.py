@@ -2,6 +2,7 @@ from cplex import Cplex
 from dimacs import DIMACS
 from math import floor
 from time import time
+from networkx import coloring
 import sys
 
 problem_type = Cplex.problem_type
@@ -15,7 +16,7 @@ class MaxCliqueSolver:
     __heuristics = []
     __optimization_problem = None
     __silent = False
-    __nodes = []
+    __independent_sets = []
 
     def __init__(self, problem, heuristics=None):
         """
@@ -43,18 +44,33 @@ class MaxCliqueSolver:
         problem.objective.set_sense(sense=sense.maximize)
 
         variables = self.__build_variables()
-        self.__log('Variables: ', variables)
+        # self.__log('Variables: ', variables)
 
         objective = self.__build_objective(variables)
-        self.__log('Objective: ', objective)
+        # self.__log('Objective: ', objective)
 
-        problem.variables.add(names=variables, obj=objective)
+        problem.variables.add(names=variables, types=['C'] * len(variables), ub=[1.0] * self.__problem.vertices_num(),
+                              obj=objective)
 
         constraints = self.__build_constraints(variables)
-        self.__log('Constraints count: ', len(constraints))
+        # self.__log('Constraints count: ', len(constraints))
         self.__set_constraints(problem, constraints)
 
         self.__optimization_problem = problem
+
+    def init_independent_sets(self):
+        strategies = [coloring.strategy_largest_first,
+                      coloring.strategy_random_sequential,
+                      coloring.strategy_independent_set,
+                      coloring.strategy_connected_sequential_bfs,
+                      coloring.strategy_connected_sequential_dfs,
+                      coloring.strategy_saturation_largest_first]
+
+        for strategy in strategies:
+            d = coloring.greedy_color(self.__graph(), strategy=strategy)
+            for color in set(color for node, color in d.items()):
+                self.__independent_sets.append(
+                    [key for key, value in d.items() if value == color])
 
     def __build_variables(self):
         return ['x' + str(x) for x in range(1, self.__problem.vertices_num() + 1)]
@@ -68,8 +84,13 @@ class MaxCliqueSolver:
             for j in range(i, self.__problem.vertices_num()):
                 if i != j and not self.__graph().has_edge(i, j):
                     constraint = [[variables[i], variables[j]], [1, 1], 'L', 1]
-                    self.__log('Constraint: ', constraint)
+                    # self.__log('Constraint: ', constraint)
                     constraints.append(constraint)
+
+        for independent_set in self.__independent_sets:
+            variables = [variables[node] for node in independent_set]
+            constraint = [[variables], [1] * len(variables), 'L', 1]
+            constraints.append(constraint)
 
         return constraints
 
@@ -97,25 +118,25 @@ class MaxCliqueSolver:
     def __get_sorted_nodes(self):
         graph = self.__graph()
 
-        return sorted(graph.nodes, key=lambda x: graph.degree[x], reverse=True)
+        return sorted(graph.nodes, key=lambda x: graph.degree[x])
 
-    def __apply_heuristics(self, heuristics):
-        result = [heuristic(self.__problem.graph(), self.__nodes) for heuristic in heuristics]
-        self.__log(result)
+    def __apply_heuristics(self, heuristics, nodes):
+        result = [heuristic(self.__problem.graph(), nodes) for heuristic in heuristics]
+        # self.__log(result)
 
         self.__max_clique = max(result, key=len)
         self.__max_clique_len = len(self.__max_clique)
 
         return self.__max_clique, self.__max_clique_len
 
-    def __filter_nodes(self, degree):
+    def __filter_nodes(self, nodes, degree):
         graph = self.__graph()
-        self.__nodes = list(filter(lambda node: graph.degree[node] > degree, self.__nodes))
+        return list(filter(lambda node: graph.degree[node] > degree, nodes))
 
     def __update_max_clique(self, opt_point):
         clique = []
 
-        self.__log(opt_point)
+        # self.__log(opt_point)
         for i in range(0, len(opt_point)):
             if not self.__is_integer(opt_point[i]):
                 return False
@@ -138,20 +159,19 @@ class MaxCliqueSolver:
         solution = problem.solution.get_objective_value()
 
         upper_bound = floor(solution)
-        self.__log(solution, upper_bound, opt_point, )
-
-        self.__log(upper_bound, self.__max_clique_len, force=True)
-        self.__log('nodes', nodes, force=True)
-        self.__log('opt_point', opt_point, force=True)
-        self.__log('solution', solution, force=True)
+        # self.__log(solution, upper_bound, opt_point, )
+        #
+        # self.__log(upper_bound, self.__max_clique_len, force=True)
+        # self.__log('nodes', nodes, force=True)
+        # self.__log('opt_point', opt_point, force=True)
+        # self.__log('solution', solution, force=True)
         # self.__log('Max clique: ', self.__max_clique, force=True)
         # self.__log('Max clique length: ', self.__max_clique_len, force=True)
-        self.__log('__nodes: ', len(self.__nodes), force=True)
+        # self.__log('__nodes: ', len(self.__nodes), force=True)
         if upper_bound <= self.__max_clique_len:
             return
 
         if self.__update_max_clique(opt_point):
-            self.__filter_nodes(self.__max_clique_len)
             return
 
         for i in range(0, len(nodes)):
@@ -161,7 +181,7 @@ class MaxCliqueSolver:
             if not self.__is_integer(value):
                 val = floor(value)
 
-                new_nodes = nodes[i + 1:]
+                new_nodes = self.__filter_nodes(nodes[i + 1:], self.__max_clique_len)
 
                 if len(new_nodes) == 0:
                     return
@@ -169,29 +189,38 @@ class MaxCliqueSolver:
                 variables = problem.variables.get_names()
                 variable = variables[index]
 
-                new_problem = self.__clone_problem(problem)
-                new_problem.linear_constraints.add(names=[str(variable)],
-                                                   lin_expr=[[[variable], [1]]],
-                                                   senses=['G'],
-                                                   rhs=[val + 1])
+                problem.linear_constraints.add(names=[str(variable)],
+                                               lin_expr=[[[variable], [1]]],
+                                               senses=['G'],
+                                               rhs=[val + 1])
                 try:
-                    self.__resolve_max_clique(new_problem, new_nodes)
+                    self.__resolve_max_clique(problem, new_nodes)
+
                 except:
-                    self.__log("Unexpected error:", sys.exc_info()[0], force=True)
+                    # self.__log("Unexpected error:", sys.exc_info()[0], force=True)
+                    pass
 
-                    new_problem = self.__clone_problem(problem)
-                    new_problem.linear_constraints.add(names=[variable],
-                                                       lin_expr=[[[variable], [1]]],
-                                                       senses=['L'],
-                                                       rhs=[val])
-                    try:
-                        self.__resolve_max_clique(new_problem, new_nodes)
-                    except:
-                        self.__log("Unexpected error:", sys.exc_info()[0], force=True)
+                if upper_bound <= self.__max_clique_len:
+                    return
 
-        self.__log('Max clique: ', self.__max_clique, force=True)
-        self.__log('Max clique length: ', self.__max_clique_len, force=True)
-        self.__log('__nodes: ', len(self.__nodes), force=True)
+                problem.linear_constraints.delete(str(variable))
+                new_nodes = self.__filter_nodes(nodes[i + 1:], self.__max_clique_len)
+
+                problem.linear_constraints.add(names=[variable],
+                                               lin_expr=[[[variable], [1]]],
+                                               senses=['L'],
+                                               rhs=[val])
+                try:
+                    self.__resolve_max_clique(problem, new_nodes)
+                except:
+                    # self.__log("Unexpected error:", sys.exc_info()[0], force=True)
+                    pass
+
+                problem.linear_constraints.delete(str(variable))
+
+        # self.__log('Max clique: ', self.__max_clique, force=True)
+        # self.__log('Max clique length: ', self.__max_clique_len, force=True)
+        # self.__log('__nodes: ', len(self.__nodes), force=True)
 
     def __configure_problem(self, problem):
         """
@@ -204,24 +233,6 @@ class MaxCliqueSolver:
             problem.set_error_stream(None)
             problem.set_results_stream(None)
 
-    def __clone_problem(self, problem):
-        """
-
-        :type problem: Cplex
-        """
-        new_problem = Cplex()
-
-        new_problem.set_problem_type(problem.get_problem_type())
-        new_problem.objective.set_sense(problem.objective.get_sense())
-        new_problem.variables.add(names=problem.variables.get_names(), obj=problem.objective.get_linear())
-        new_problem.linear_constraints.add(lin_expr=problem.linear_constraints.get_rows(),
-                                           names=problem.linear_constraints.get_names(),
-                                           rhs=problem.linear_constraints.get_rhs(),
-                                           senses=problem.linear_constraints.get_senses())
-        self.__configure_problem(new_problem)
-
-        return new_problem
-
     def __log(self, *strings, force=False):
         if not self.__silent or force:
             print(*strings)
@@ -232,21 +243,21 @@ class MaxCliqueSolver:
             self.__init_optimization_problem()
             self.__configure_problem(self.__optimization_problem)
 
-        self.__nodes = self.__get_sorted_nodes()
-        self.__apply_heuristics(self.__heuristics)
+        nodes = self.__get_sorted_nodes()
+        self.__apply_heuristics(self.__heuristics, nodes)
+        nodes = self.__filter_nodes(nodes, self.__max_clique_len)
 
-        self.__filter_nodes(self.__max_clique_len)
-
-        start_time = time()
-        self.__log('Start time: ', start_time)
+        start_time = time() * 1000
+        # self.__log('Start time: ', start_time)
 
         try:
-            self.__resolve_max_clique(self.__optimization_problem, self.__nodes)
+            self.__resolve_max_clique(self.__optimization_problem, nodes)
         except:
             self.__log("Unexpected error:", sys.exc_info()[0], force=True)
 
-        end_time = time()
-        self.__log(end_time)
+        # self.__pool.join()
+        end_time = time() * 1000
+        # self.__log(end_time)
 
         duration = end_time - start_time
 
