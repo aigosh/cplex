@@ -36,7 +36,6 @@ class MaxCliqueSolver:
     def __init_optimization_problem(self):
 
         problem = Cplex()
-        problem.set_problem_type(problem_type.LP)
 
         sense = problem.objective.sense
         problem.objective.set_sense(sense=sense.maximize)
@@ -57,31 +56,31 @@ class MaxCliqueSolver:
         self.__optimization_problem = problem
 
     def __init_independent_sets(self):
-        # independent_sets = []
-        # strategies = [coloring.strategy_largest_first,
-        #               coloring.strategy_random_sequential,
-        #               coloring.strategy_independent_set,
-        #               coloring.strategy_connected_sequential_bfs,
-        #               coloring.strategy_connected_sequential_dfs,
-        #               coloring.strategy_saturation_largest_first]
-        #
-        # for strategy in strategies:
-        #     d = coloring.greedy_color(self.__graph(), strategy=strategy)
-        #     for color in set(color for node, color in d.items()):
-        #         independent_sets.append(
-        #             [key for key, value in d.items() if value == color])
-        # self.__independent_sets = independent_sets
-        pass
+        independent_sets = []
+        strategies = [coloring.strategy_largest_first,
+                      coloring.strategy_random_sequential,
+                      coloring.strategy_independent_set,
+                      coloring.strategy_connected_sequential_bfs,
+                      coloring.strategy_connected_sequential_dfs,
+                      coloring.strategy_saturation_largest_first]
+
+        for strategy in strategies:
+            d = coloring.greedy_color(self.__graph(), strategy=strategy)
+            for color in set(color for node, color in d.items()):
+                independent_sets.append(
+                    [key for key, value in d.items() if value == color])
+        self.__independent_sets = independent_sets
+        # pass
 
     def __build_variables(self):
-        return ['x' + str(x) for x in range(1, self.__problem.vertices_num() + 1)]
+        return ['x' + str(x + 1) for x in range(0, self.__problem.vertices_num())]
 
     def __build_constraints(self, variables):
         constraints = []
 
         for i in range(0, self.__problem.vertices_num()):
             for j in range(i, self.__problem.vertices_num()):
-                if i != j and not self.__graph().has_edge(i, j):
+                if i != j and not self.__graph().has_edge(i + 1, j + 1):
                     constraint = [[variables[i], variables[j]], [1.0, 1.0], 'L', 1.0]
                     # self.__log('Constraint: ', constraint)
                     constraints.append(constraint)
@@ -112,7 +111,7 @@ class MaxCliqueSolver:
             sign = constraint[2]  # знак
             rh = constraint[3]  # правая часть ограничения
 
-            problem.linear_constraints.add(names=[str(time())], lin_expr=[lh], senses=[sign], rhs=[rh])
+            problem.linear_constraints.add(names=[''.join(variables) + sign + str(rh)], lin_expr=[lh], senses=[sign], rhs=[rh])
 
     def __get_sorted_nodes(self):
         graph = self.__graph()
@@ -139,12 +138,14 @@ class MaxCliqueSolver:
         for i in range(0, len(opt_point)):
             if not self.__is_integer(opt_point[i]):
                 return False
-            if abs(opt_point[i] - 1) < 0.0001:
-                clique.append(i)
+            if abs(opt_point[i] - 1.0) < 0.0001:
+                clique.append(i + 1)
+
 
         # if len(clique) > self.__max_clique_len:
         self.__max_clique = clique
         self.__max_clique_len = len(clique)
+        # print(self.__max_clique_len)
         #     return True
 
         return True
@@ -160,6 +161,8 @@ class MaxCliqueSolver:
         solution = problem.solution.get_objective_value()
 
         upper_bound = floor(solution)
+
+        print(solution, self.__max_clique_len, '\n', opt_point)
         # self.__log(solution, upper_bound, opt_point, )
         #
         # self.__log(upper_bound, self.__max_clique_len, force=True)
@@ -180,6 +183,7 @@ class MaxCliqueSolver:
         except:
             return
         branch = floor(value)
+        print(opt_point[index])
 
         nodes = [item for item in nodes if item != node]
         new_nodes = self.__filter_nodes(nodes, self.__max_clique_len)
@@ -188,11 +192,11 @@ class MaxCliqueSolver:
         variable = variables[index]
 
         problem.linear_constraints.add(names=[str(variable)],
-                                       lin_expr=[[[variable], [1]]],
+                                       lin_expr=[[[variable], [1.0]]],
                                        senses=['G'],
-                                       rhs=[branch + 1])
+                                       rhs=[1.0])
         try:
-            # print(variable, '>=', branch + 1)
+            print(variable, '>=', branch + 1)
             self.__resolve_max_clique(problem, new_nodes)
 
         except:
@@ -206,11 +210,11 @@ class MaxCliqueSolver:
         new_nodes = self.__filter_nodes(new_nodes, self.__max_clique_len)
 
         problem.linear_constraints.add(names=[variable],
-                                       lin_expr=[[[variable], [1]]],
+                                       lin_expr=[[[variable], [1.0]]],
                                        senses=['L'],
-                                       rhs=[branch])
+                                       rhs=[0.0])
         try:
-            # print(variable, '<=', branch)
+            print(variable, '<=', branch)
             self.__resolve_max_clique(problem, new_nodes)
         except:
             self.__log("Unexpected error:", sys.exc_info()[0], force=True)
@@ -258,12 +262,16 @@ class MaxCliqueSolver:
         nodes = self.__get_sorted_nodes()
         self.__apply_heuristics(self.__heuristics, nodes)
         nodes = self.__filter_nodes(nodes, self.__max_clique_len)
+        print(nodes)
 
         start_time = time() * 1000
         # self.__log('Start time: ', start_time)
 
         try:
             self.__resolve_max_clique(self.__optimization_problem, nodes)
+        except KeyboardInterrupt:
+            exit(1)
+            return
         except:
             self.__log("Unexpected error:", sys.exc_info()[0], force=True)
             # pass

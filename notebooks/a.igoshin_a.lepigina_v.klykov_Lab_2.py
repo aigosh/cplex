@@ -1,5 +1,6 @@
 import sys
 from os import path, curdir, scandir
+from networkx.algorithms.approximation import max_clique
 
 
 def Common_nodes(l1, l2):
@@ -58,4 +59,5 @@ if __name__ == '__main__':
         problem = DIMACS(problem_path)
         print(problem.description())
         solver = MaxCliqueSolver(problem, [clique_heur])
+        # print(max_clique(problem.graph()))
         print(file, solver.solve(silent=True))
