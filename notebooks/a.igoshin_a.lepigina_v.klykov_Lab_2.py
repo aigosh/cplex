@@ -47,10 +47,6 @@ if __name__ == '__main__':
     from max_clique import MaxCliqueSolver
 
     clq_dir = path.join(curdir, '../clq')
-    # problem_path = path.join(clq_dir, 'c-fat200-2.clq')
-    # problem = DIMACS(problem_path)
-
-    # print(problem.description())
 
     files = scandir(clq_dir)
 
@@ -60,4 +56,11 @@ if __name__ == '__main__':
         print(problem.description())
         solver = MaxCliqueSolver(problem, [clique_heur])
         # print(max_clique(problem.graph()))
-        print(file, solver.solve(silent=True))
+        clique, size, duration = solver.solve(silent=True)
+        print(file)
+        print('''
+            *** Maximum Clique Size {0}
+            *** Maximum clique {1}
+            *** Duration {2} ms
+        '''.format(size, clique, duration))
+        print('_' * 100)

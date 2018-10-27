@@ -111,7 +111,8 @@ class MaxCliqueSolver:
             sign = constraint[2]  # знак
             rh = constraint[3]  # правая часть ограничения
 
-            problem.linear_constraints.add(names=[''.join(variables) + sign + str(rh)], lin_expr=[lh], senses=[sign], rhs=[rh])
+            problem.linear_constraints.add(names=[''.join(variables) + sign + str(rh)], lin_expr=[lh], senses=[sign],
+                                           rhs=[rh])
 
     def __get_sorted_nodes(self):
         graph = self.__graph()
@@ -141,12 +142,10 @@ class MaxCliqueSolver:
             if abs(opt_point[i] - 1.0) < 0.0001:
                 clique.append(i + 1)
 
-
-        # if len(clique) > self.__max_clique_len:
         self.__max_clique = clique
         self.__max_clique_len = len(clique)
-        # print(self.__max_clique_len)
-        #     return True
+
+        self.__log('\n* Maximum clique updated: ', self.__max_clique_len, force=True)
 
         return True
 
@@ -162,9 +161,7 @@ class MaxCliqueSolver:
 
         upper_bound = floor(solution)
 
-        print(solution, self.__max_clique_len, '\n', opt_point)
         # self.__log(solution, upper_bound, opt_point, )
-        #
         # self.__log(upper_bound, self.__max_clique_len, force=True)
         # self.__log('nodes', nodes, force=True)
         # self.__log('opt_point', opt_point, force=True)
@@ -178,49 +175,50 @@ class MaxCliqueSolver:
         if self.__update_max_clique(opt_point):
             return
 
-        try:
-            node, index, value = self.__get_branching_node(nodes, opt_point)
-        except:
-            return
-        branch = floor(value)
-        print(opt_point[index])
+        for index in range(0, len(nodes)):
+            value = opt_point[index]
+            if not self.__is_integer(value):
+                branch = floor(value)
 
-        nodes = [item for item in nodes if item != node]
-        new_nodes = self.__filter_nodes(nodes, self.__max_clique_len)
+                new_nodes = self.__filter_nodes(nodes[index + 1:], self.__max_clique_len)
 
-        variables = problem.variables.get_names()
-        variable = variables[index]
+                variables = problem.variables.get_names()
+                variable = variables[index]
 
-        problem.linear_constraints.add(names=[str(variable)],
-                                       lin_expr=[[[variable], [1.0]]],
-                                       senses=['G'],
-                                       rhs=[1.0])
-        try:
-            print(variable, '>=', branch + 1)
-            self.__resolve_max_clique(problem, new_nodes)
+                problem.linear_constraints.add(names=[str(variable)],
+                                               lin_expr=[[[variable], [1.0]]],
+                                               senses=['G'],
+                                               rhs=[float(branch + 1)])
+                self.__log(variable, '>=', branch + 1)
 
-        except:
-            self.__log("Unexpected error:", sys.exc_info()[0], force=True)
-            # pass
+                try:
+                    self.__resolve_max_clique(problem, new_nodes)
+                except KeyboardInterrupt:
+                    sys.exit(1)
+                except:
+                    self.__log("Unexpected error:", sys.exc_info()[0], force=True)
 
-        if upper_bound <= self.__max_clique_len:
-            return
+                if upper_bound <= self.__max_clique_len:
+                    return
 
-        problem.linear_constraints.delete(str(variable))
-        new_nodes = self.__filter_nodes(new_nodes, self.__max_clique_len)
+                problem.linear_constraints.delete(str(variable))
+                new_nodes = self.__filter_nodes(new_nodes, self.__max_clique_len)
 
-        problem.linear_constraints.add(names=[variable],
-                                       lin_expr=[[[variable], [1.0]]],
-                                       senses=['L'],
-                                       rhs=[0.0])
-        try:
-            print(variable, '<=', branch)
-            self.__resolve_max_clique(problem, new_nodes)
-        except:
-            self.__log("Unexpected error:", sys.exc_info()[0], force=True)
-            # pass
+                problem.linear_constraints.add(names=[variable],
+                                               lin_expr=[[[variable], [1.0]]],
+                                               senses=['L'],
+                                               rhs=[float(branch)])
+                self.__log(variable, '<=', branch)
 
-        problem.linear_constraints.delete(str(variable))
+                try:
+                    self.__resolve_max_clique(problem, new_nodes)
+                except KeyboardInterrupt:
+                    sys.exit(1)
+                except:
+                    self.__log("Unexpected error:", sys.exc_info()[0], force=True)
+                    # pass
+
+                problem.linear_constraints.delete(str(variable))
 
         # self.__log('Max clique: ', self.__max_clique, force=True)
         # self.__log('Max clique length: ', self.__max_clique_len, force=True)
@@ -260,9 +258,11 @@ class MaxCliqueSolver:
             self.__configure_problem(self.__optimization_problem)
 
         nodes = self.__get_sorted_nodes()
+
         self.__apply_heuristics(self.__heuristics, nodes)
+        self.__log('* Heuristics clique: ', self.__max_clique_len, force=True)
+
         nodes = self.__filter_nodes(nodes, self.__max_clique_len)
-        print(nodes)
 
         start_time = time() * 1000
         # self.__log('Start time: ', start_time)
@@ -270,8 +270,7 @@ class MaxCliqueSolver:
         try:
             self.__resolve_max_clique(self.__optimization_problem, nodes)
         except KeyboardInterrupt:
-            exit(1)
-            return
+            sys.exit(1)
         except:
             self.__log("Unexpected error:", sys.exc_info()[0], force=True)
             # pass
