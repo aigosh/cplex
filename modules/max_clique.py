@@ -80,18 +80,16 @@ class MaxCliqueSolver:
         constraints = []
 
         for i in range(0, self.__problem.vertices_num()):
-            constraint = [[variables[i]], [1], 'L', 1]
-            constraints.append(constraint)
             for j in range(i, self.__problem.vertices_num()):
                 if i != j and not self.__graph().has_edge(i, j):
-                    constraint = [[variables[i], variables[j]], [1, 1], 'L', 1]
+                    constraint = [[variables[i], variables[j]], [1.0, 1.0], 'L', 1.0]
                     # self.__log('Constraint: ', constraint)
                     constraints.append(constraint)
 
-        # for independent_set in self.__independent_sets:
-        #     constraint_variables = [variables[node - 1] for node in independent_set]
-        #     constraint = [constraint_variables, [1] * len(constraint_variables), 'L', 1]
-        #     constraints.append(constraint)
+        for independent_set in self.__independent_sets:
+            constraint_variables = [variables[node - 1] for node in independent_set]
+            constraint = [constraint_variables, [1.0] * len(constraint_variables), 'L', 1.0]
+            constraints.append(constraint)
 
         return constraints
 
@@ -99,7 +97,7 @@ class MaxCliqueSolver:
         return abs(value - round(value)) < 0.0001
 
     def __build_objective(self, variables):
-        objective = [1] * len(variables)
+        objective = [1.0] * len(variables)
 
         return objective
 
@@ -141,11 +139,13 @@ class MaxCliqueSolver:
         for i in range(0, len(opt_point)):
             if not self.__is_integer(opt_point[i]):
                 return False
-            if opt_point[i] == 1:
+            if abs(opt_point[i] - 1) < 0.0001:
                 clique.append(i)
 
+        # if len(clique) > self.__max_clique_len:
         self.__max_clique = clique
         self.__max_clique_len = len(clique)
+        #     return True
 
         return True
 
@@ -175,14 +175,14 @@ class MaxCliqueSolver:
         if self.__update_max_clique(opt_point):
             return
 
-        node, index, value = self.__get_branching_node(nodes, opt_point)
+        try:
+            node, index, value = self.__get_branching_node(nodes, opt_point)
+        except:
+            return
         branch = floor(value)
 
-        nodes.remove(node)
+        nodes = [item for item in nodes if item != node]
         new_nodes = self.__filter_nodes(nodes, self.__max_clique_len)
-
-        if len(new_nodes) == 0:
-            return
 
         variables = problem.variables.get_names()
         variable = variables[index]
@@ -192,6 +192,7 @@ class MaxCliqueSolver:
                                        senses=['G'],
                                        rhs=[branch + 1])
         try:
+            # print(variable, '>=', branch + 1)
             self.__resolve_max_clique(problem, new_nodes)
 
         except:
@@ -209,6 +210,7 @@ class MaxCliqueSolver:
                                        senses=['L'],
                                        rhs=[branch])
         try:
+            # print(variable, '<=', branch)
             self.__resolve_max_clique(problem, new_nodes)
         except:
             self.__log("Unexpected error:", sys.exc_info()[0], force=True)
