@@ -11,7 +11,6 @@ problem_type = Cplex.problem_type
 class MaxCliqueSolver:
     __max_clique_len = 0
     __max_clique = []
-    __upper_bound = None
     __problem = None
     __heuristics = []
     __optimization_problem = None
@@ -30,7 +29,6 @@ class MaxCliqueSolver:
 
         self.__heuristics = heuristics
         self.__problem = problem
-        self.__upper_bound = problem.vertices_num()
 
     def __graph(self):
         return self.__problem.graph()
@@ -59,18 +57,21 @@ class MaxCliqueSolver:
         self.__optimization_problem = problem
 
     def __init_independent_sets(self):
-        strategies = [coloring.strategy_largest_first,
-                      coloring.strategy_random_sequential,
-                      coloring.strategy_independent_set,
-                      coloring.strategy_connected_sequential_bfs,
-                      coloring.strategy_connected_sequential_dfs,
-                      coloring.strategy_saturation_largest_first]
-
-        for strategy in strategies:
-            d = coloring.greedy_color(self.__graph(), strategy=strategy)
-            for color in set(color for node, color in d.items()):
-                self.__independent_sets.append(
-                    [key for key, value in d.items() if value == color])
+        # independent_sets = []
+        # strategies = [coloring.strategy_largest_first,
+        #               coloring.strategy_random_sequential,
+        #               coloring.strategy_independent_set,
+        #               coloring.strategy_connected_sequential_bfs,
+        #               coloring.strategy_connected_sequential_dfs,
+        #               coloring.strategy_saturation_largest_first]
+        #
+        # for strategy in strategies:
+        #     d = coloring.greedy_color(self.__graph(), strategy=strategy)
+        #     for color in set(color for node, color in d.items()):
+        #         independent_sets.append(
+        #             [key for key, value in d.items() if value == color])
+        # self.__independent_sets = independent_sets
+        pass
 
     def __build_variables(self):
         return ['x' + str(x) for x in range(1, self.__problem.vertices_num() + 1)]
@@ -87,10 +88,10 @@ class MaxCliqueSolver:
                     # self.__log('Constraint: ', constraint)
                     constraints.append(constraint)
 
-        for independent_set in self.__independent_sets:
-            constraint_variables = [variables[node - 1] for node in independent_set]
-            constraint = [constraint_variables, [1] * len(constraint_variables), 'L', 1]
-            constraints.append(constraint)
+        # for independent_set in self.__independent_sets:
+        #     constraint_variables = [variables[node - 1] for node in independent_set]
+        #     constraint = [constraint_variables, [1] * len(constraint_variables), 'L', 1]
+        #     constraints.append(constraint)
 
         return constraints
 
