@@ -2,10 +2,17 @@ from cplex import Cplex
 from dimacs import DIMACS
 from math import floor
 from time import time
-from networkx import coloring
+from networkx import coloring, Graph, maximal_independent_set
 import sys
+from enum import Enum
 
 problem_type = Cplex.problem_type
+EPSILON = 0.0001
+
+
+class SENSE(Enum):
+    GREATER = 'G',
+    LOWER = 'L'
 
 
 class MaxCliqueSolver:
@@ -55,7 +62,7 @@ class MaxCliqueSolver:
 
         self.__optimization_problem = problem
 
-    def __init_independent_sets(self):
+    def __get_independent_sets(self, graph):
         independent_sets = []
         strategies = [coloring.strategy_largest_first,
                       coloring.strategy_random_sequential,
@@ -69,8 +76,21 @@ class MaxCliqueSolver:
             for color in set(color for node, color in d.items()):
                 independent_sets.append(
                     [key for key, value in d.items() if value == color])
-        self.__independent_sets = independent_sets
+
+        return independent_sets
+
+    def __init_independent_sets(self):
+        graph = self.__graph()
+        self.__independent_sets = self.__get_independent_sets(graph)
         # pass
+
+    def __build_indepndent_set_constraint(self, variables, independent_set):
+        constraint_variables = [variables[node - 1] for node in independent_set]
+        return [constraint_variables, [1.0] * len(constraint_variables), SENSE.LOWER, 1.0]
+
+    def __get_independent_set_constraints(self, variables, independent_sets):
+        return [self.__build_indepndent_set_constraint(variables, independent_set)
+                for independent_set in independent_sets]
 
     def __build_variables(self):
         return ['x' + str(x + 1) for x in range(0, self.__problem.vertices_num())]
@@ -81,19 +101,24 @@ class MaxCliqueSolver:
         for i in range(0, self.__problem.vertices_num()):
             for j in range(i, self.__problem.vertices_num()):
                 if i != j and not self.__graph().has_edge(i + 1, j + 1):
-                    constraint = [[variables[i], variables[j]], [1.0, 1.0], 'L', 1.0]
+                    constraint = [[variables[i], variables[j]], [1.0, 1.0], SENSE.LOWER, 1.0]
                     # self.__log('Constraint: ', constraint)
                     constraints.append(constraint)
 
-        for independent_set in self.__independent_sets:
-            constraint_variables = [variables[node - 1] for node in independent_set]
-            constraint = [constraint_variables, [1.0] * len(constraint_variables), 'L', 1.0]
-            constraints.append(constraint)
+        independent_set_constraints = self.__get_independent_set_constraints(variables, self.__independent_sets)
+        constraints.extend(independent_set_constraints)
 
         return constraints
 
+    def __get_max_independent_set(self, independent_sets, opt_point):
+        def get_sum(independent_set):
+            return sum([opt_point[node - 1] for node in independent_set])
+
+        result = max(independent_sets, key=get_sum)
+        return result, get_sum(result)
+
     def __is_integer(self, value):
-        return abs(value - round(value)) < 0.0001
+        return abs(value - round(value)) <= EPSILON
 
     def __build_objective(self, variables):
         objective = [1.0] * len(variables)
@@ -139,7 +164,7 @@ class MaxCliqueSolver:
         for i in range(0, len(opt_point)):
             if not self.__is_integer(opt_point[i]):
                 return False
-            if abs(opt_point[i] - 1.0) < 0.0001:
+            if abs(opt_point[i] - 1.0) <= EPSILON:
                 clique.append(i + 1)
 
         self.__max_clique = clique
@@ -149,17 +174,23 @@ class MaxCliqueSolver:
 
         return True
 
-    def __resolve_max_clique(self, problem, nodes):
+    def __nonint_nodes(self, nodes, opt_point):
+        return [node for node in nodes if not self.__is_integer(opt_point[node - 1])]
+
+    def __branching(self, problem, nodes):
         """
 
         :type problem: Cplex
         """
-        problem.solve()
+        try:
+            problem.solve()
+        except:
+            return
 
         opt_point = problem.solution.get_values()
         solution = problem.solution.get_objective_value()
 
-        upper_bound = floor(solution)
+        upper_bound = floor(solution + EPSILON)
 
         # self.__log(solution, upper_bound, opt_point, )
         # self.__log(upper_bound, self.__max_clique_len, force=True)
@@ -175,54 +206,57 @@ class MaxCliqueSolver:
         if self.__update_max_clique(opt_point):
             return
 
-        for index in range(0, len(nodes)):
-            value = opt_point[index]
-            if not self.__is_integer(value):
-                branch = floor(value)
+        branching = self.__get_branching_node(nodes, opt_point)
+        variables = problem.variables.get_names()
 
-                new_nodes = self.__filter_nodes(nodes[index + 1:], self.__max_clique_len)
+        if branching is None:
+            return
 
-                variables = problem.variables.get_names()
-                variable = variables[index]
+        branching_node, branch_index, branch_value = branching
+        nonint_nodes = self.__nonint_nodes(nodes, opt_point)
 
-                problem.linear_constraints.add(names=[str(variable)],
-                                               lin_expr=[[[variable], [1.0]]],
-                                               senses=['G'],
-                                               rhs=[float(branch + 1)])
-                self.__log(variable, '>=', branch + 1)
+        if not len(nonint_nodes):
+            return
 
-                try:
-                    self.__resolve_max_clique(problem, new_nodes)
-                except KeyboardInterrupt:
-                    sys.exit(1)
-                except:
-                    self.__log("Unexpected error:", sys.exc_info()[0], force=True)
+        sub_graph: Graph = self.__graph().subgraph(nonint_nodes)
+        independent_sets = self.__get_independent_sets(sub_graph)
 
-                if upper_bound <= self.__max_clique_len:
-                    return
+        if len(independent_sets):
+            found_independent_set, found_sum = self.__get_max_independent_set(independent_sets, opt_point)
 
-                problem.linear_constraints.delete(str(variable))
-                new_nodes = self.__filter_nodes(new_nodes, self.__max_clique_len)
+            if found_sum < 1.0:
+                return
 
-                problem.linear_constraints.add(names=[variable],
-                                               lin_expr=[[[variable], [1.0]]],
-                                               senses=['L'],
-                                               rhs=[float(branch)])
-                self.__log(variable, '<=', branch)
+            max_independent_set = maximal_independent_set(self.__graph(), found_independent_set)
+            constraints = self.__get_independent_set_constraints(variables, [max_independent_set])
+            self.__set_constraints(problem, constraints)
+            self.__branching(problem, nodes)
+            return
 
-                try:
-                    self.__resolve_max_clique(problem, new_nodes)
-                except KeyboardInterrupt:
-                    sys.exit(1)
-                except:
-                    self.__log("Unexpected error:", sys.exc_info()[0], force=True)
-                    # pass
+        variables = problem.variables.get_names()
+        variable = variables[branch_index]
 
-                problem.linear_constraints.delete(str(variable))
+        problem.linear_constraints.add(names=[str(variable)],
+                                       lin_expr=[[[variable], [1.0]]],
+                                       senses=[SENSE.LOWER],
+                                       rhs=[0.0])
+        self.__log(variable, '>=', branch_value + 1)
 
-        # self.__log('Max clique: ', self.__max_clique, force=True)
-        # self.__log('Max clique length: ', self.__max_clique_len, force=True)
-        # self.__log('__nodes: ', len(self.__nodes), force=True)
+        self.__branching(problem, nodes)
+
+        if upper_bound <= self.__max_clique_len:
+            return
+
+        problem.linear_constraints.delete(str(variable))
+
+        problem.linear_constraints.add(names=[variable],
+                                       lin_expr=[[[variable], [1.0]]],
+                                       senses=[SENSE.GREATER],
+                                       rhs=[1.0])
+        self.__log(variable, '<=', branch_value)
+
+        self.__branching(problem, nodes)
+        problem.linear_constraints.delete(str(variable))
 
     def __get_branching_node(self, nodes, opt_point):
         """
@@ -268,7 +302,7 @@ class MaxCliqueSolver:
         # self.__log('Start time: ', start_time)
 
         try:
-            self.__resolve_max_clique(self.__optimization_problem, nodes)
+            self.__branching(self.__optimization_problem, nodes)
         except KeyboardInterrupt:
             sys.exit(1)
         except:
