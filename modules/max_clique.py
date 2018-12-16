@@ -72,7 +72,7 @@ class MaxCliqueSolver:
                       coloring.strategy_saturation_largest_first]
 
         for strategy in strategies:
-            d = coloring.greedy_color(self.__graph(), strategy=strategy)
+            d = coloring.greedy_color(graph, strategy=strategy)
             for color in set(color for node, color in d.items()):
                 independent_sets.append(
                     [key for key, value in d.items() if value == color])
@@ -86,7 +86,7 @@ class MaxCliqueSolver:
 
     def __build_indepndent_set_constraint(self, variables, independent_set):
         constraint_variables = [variables[node - 1] for node in independent_set]
-        return [constraint_variables, [1.0] * len(constraint_variables), SENSE.LOWER, 1.0]
+        return [constraint_variables, [1.0] * len(constraint_variables), SENSE.LOWER.value, 1.0]
 
     def __get_independent_set_constraints(self, variables, independent_sets):
         return [self.__build_indepndent_set_constraint(variables, independent_set)
@@ -101,7 +101,7 @@ class MaxCliqueSolver:
         for i in range(0, self.__problem.vertices_num()):
             for j in range(i, self.__problem.vertices_num()):
                 if i != j and not self.__graph().has_edge(i + 1, j + 1):
-                    constraint = [[variables[i], variables[j]], [1.0, 1.0], SENSE.LOWER, 1.0]
+                    constraint = [[variables[i], variables[j]], [1.0, 1.0], SENSE.LOWER.value, 1.0]
                     # self.__log('Constraint: ', constraint)
                     constraints.append(constraint)
 
@@ -238,7 +238,7 @@ class MaxCliqueSolver:
 
         problem.linear_constraints.add(names=[str(variable)],
                                        lin_expr=[[[variable], [1.0]]],
-                                       senses=[SENSE.LOWER],
+                                       senses=[SENSE.LOWER.value],
                                        rhs=[0.0])
         self.__log(variable, '>=', branch_value + 1)
 
@@ -251,7 +251,7 @@ class MaxCliqueSolver:
 
         problem.linear_constraints.add(names=[variable],
                                        lin_expr=[[[variable], [1.0]]],
-                                       senses=[SENSE.GREATER],
+                                       senses=[SENSE.GREATER.value],
                                        rhs=[1.0])
         self.__log(variable, '<=', branch_value)
 
