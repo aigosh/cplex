@@ -89,7 +89,7 @@ class BranchAndPriceSolver:
             self._make_silence(problem)
 
         try:
-            problem.solve()
+            problem.feasopt(problem.feasopt.all_constraints())
         except:
             return
 
@@ -160,7 +160,7 @@ class BranchAndPriceSolver:
                 return variable, index, value
 
     def _get_min_colors(self, solution):
-        return solution if is_integer(solution) else floor(solution) + 1
+        return round(solution) if is_integer(solution) else floor(solution) + 1
 
     def _branching(self):
         try:
@@ -182,8 +182,7 @@ class BranchAndPriceSolver:
 
 
         dual_values = self.cplex.solution.get_dual_values()
-        if not self._try_add_stronger_constraints(dual_values, solution):
-            return
+        self._try_add_stronger_constraints(dual_values, solution)
 
         # нужно получить новое решение, после добавления новых ограничений, тк там возможно получение нового решения
         solution = self.cplex.solution.get_objective_value()
@@ -192,10 +191,10 @@ class BranchAndPriceSolver:
         # print(self._min_colors, solution, min_colors, opt_point)
 
         branch = self._get_branching_variable(self.cplex.variables.get_names(), opt_point)
-        print(branch)
+        # print(branch)
 
         if not branch:
-            if self._validate_coloring(opt_point) and min_colors < self._min_colors:
+            if min_colors < self._min_colors:
                 self._min_colors = min_colors
                 self._min_coloring = self._get_coloring(opt_point)
 

@@ -48,5 +48,6 @@ def build_independent_set_problem(graph: Graph, dual_values: List[float]) -> Cpl
     objective.set_to(cplex)
     LinearConstraint.set_many(cplex, edge_constraints)
     LinearConstraint.set_many(cplex, independent_sets_constraints)
+    LinearConstraint(variables, opt_point, SENSE.GREATER, 1.0).set_to(cplex)
 
     return cplex
