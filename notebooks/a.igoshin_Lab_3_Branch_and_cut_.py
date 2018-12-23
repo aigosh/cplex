@@ -1,5 +1,6 @@
 import sys
 from os import path, curdir, scandir
+from re import compile
 
 
 def Common_nodes(l1, l2):
@@ -37,12 +38,13 @@ if __name__ == '__main__':
     from dimacs import DIMACS
     from max_clique import MaxCliqueSolver
 
+    regexp = compile("^.*\.clq$")
     clq_dir = path.join(curdir, '../clq')
 
-    files = scandir(clq_dir)
+    files = filter(lambda file: regexp.match(file.name), scandir(clq_dir))
 
     for file in files:
-        problem_path = path.join(clq_dir, file)
+        problem_path = path.join(clq_dir, file.name)
         problem = DIMACS(problem_path)
         print(problem.description())
         solver = MaxCliqueSolver(problem, [clique_heur])
