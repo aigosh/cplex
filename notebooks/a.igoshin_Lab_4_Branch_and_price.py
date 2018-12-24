@@ -24,13 +24,12 @@ if __name__ == '__main__':
         solver = BranchAndPriceSolver(problem)
 
         timer = Timer()
-        timer.start()
-        colors, coloring = solver.solve(silent=True)
-        timer.stop()
+        timer.start(log=True)
+        colors = solver.solve(silent=True)
+        timer.stop(log=True)
         print(file)
         print('''
             *** Min colors {0}
-            *** Min coloring {1}
-            *** Duration {2} ms
-        '''.format(colors, coloring, timer.duration()))
+            *** Duration {1} ms
+        '''.format(colors, timer.duration()))
         print('_' * 100)

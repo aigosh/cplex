@@ -61,7 +61,7 @@ class BranchAndPriceSolver:
 
     def _has_broken_constraint(self, dual_value):
         for value in dual_value:
-            if compare(value, 1.0) == -1:
+            if not is_integer(value):
                 return True
         return False
 
@@ -77,19 +77,22 @@ class BranchAndPriceSolver:
 
     def _add_independent_set(self, independent_set):
         variable = self._variable_prefix + str(self.cplex.variables.get_num() + 1)
+        self.cplex.variables.add(names=[variable], obj=[1.0], lb=[0.0])
         for node in independent_set:
-            self.cplex.variables.add(names=[variable], lb=[0.0], obj=[1.0])
             self.cplex.linear_constraints.set_linear_components(LinearConstraint.get_node_constraint_name(node=node),
                                                                 [[variable], [1.0]])
 
     def solve_strict_max_independent_set_problem(self, dual_values):
         problem = build_independent_set_problem(self._graph, dual_values)
 
+        # return first feasible solution
+        problem.parameters.mip.limits.solutions.set(2)
+
         if self.silent:
             self._make_silence(problem)
 
         try:
-            problem.feasopt(problem.feasopt.all_constraints())
+            problem.solve()
         except:
             return
 
@@ -103,11 +106,12 @@ class BranchAndPriceSolver:
 
     def _try_add_stronger_constraints(self, dual_values, solution):
         count = 0
+        fails = 0
 
-        while count < self._limit:
+        while fails < self._limit:
             values = dual_values[0:len(self._graph.nodes)]
             if not self._has_broken_constraint(values):
-                return
+                return count > 0
 
             max_independent_set_result = get_maximal_independent_set(self._graph, values)
 
@@ -115,36 +119,41 @@ class BranchAndPriceSolver:
                 max_independent_set, max_independent_set_value = max_independent_set_result
 
             else:
-                strict_solution = self.solve_strict_max_independent_set_problem(dual_values)
+                strict_solution = self.solve_strict_max_independent_set_problem(values)
 
                 if not strict_solution:
-                    return False
+                    return count > 0
 
                 max_independent_set, max_independent_set_value = strict_solution
 
             if compare(max_independent_set_value, 1.0) != 1:
-                strict_solution = self.solve_strict_max_independent_set_problem(dual_values)
+                strict_solution = self.solve_strict_max_independent_set_problem(values)
 
                 if strict_solution:
                     max_independent_set, max_independent_set_value = strict_solution
 
             if compare(max_independent_set_value, 1.0) != 1:
-                return False
+                return count > 0
 
             self._add_independent_set(max_independent_set)
             try:
                 self.cplex.solve()
             except:
-                return False
+                variables = self.cplex.variables.get_names()
+                variable = variables[len(variables)]
+                self.cplex.variables.delete(variable)
+                self.cplex.solve()
+                return count > 0
 
             new_solution = self.cplex.solution.get_objective_value()
 
             if compare(solution, new_solution) == 0:
-                count += 1
+                fails += 1
             else:
-                count = 0
+                fails = 0
 
             dual_values = self.cplex.solution.get_dual_values()
+            count += 1
 
         return True
 
@@ -180,27 +189,38 @@ class BranchAndPriceSolver:
             self._min_colors = min_colors
             self._min_coloring = self._get_coloring(opt_point)
 
+        dual_values = self.cplex.solution.get_dual_values()[0:len(self._graph.nodes)]
 
-        dual_values = self.cplex.solution.get_dual_values()
-        self._try_add_stronger_constraints(dual_values, solution)
+        # emulation of do-while cycle
+        while True:
+            if not self._try_add_stronger_constraints(dual_values, solution):
+                solution = self.cplex.solution.get_objective_value()
+                opt_point = self.cplex.solution.get_values()
+                min_colors = self._get_min_colors(solution)
 
-        # нужно получить новое решение, после добавления новых ограничений, тк там возможно получение нового решения
-        solution = self.cplex.solution.get_objective_value()
-        opt_point = self.cplex.solution.get_values()
-        min_colors = self._get_min_colors(solution)
-        # print(self._min_colors, solution, min_colors, opt_point)
+                if self._validate_coloring(opt_point) and min_colors < self._min_colors:
+                    self._min_colors = min_colors
+                    self._min_coloring = self._get_coloring(opt_point)
+                branch = self._get_branching_variable(self.cplex.variables.get_names(), opt_point)
+                if branch:
+                    break
+                return
+            # нужно получить новое решение, после добавления новых ограничений, тк там возможно получение нового решения
+            solution = self.cplex.solution.get_objective_value()
+            opt_point = self.cplex.solution.get_values()
+            min_colors = self._get_min_colors(solution)
+            dual_values = self.cplex.solution.get_dual_values()[0:len(self._graph.nodes)]
 
-        branch = self._get_branching_variable(self.cplex.variables.get_names(), opt_point)
-        # print(branch)
+            branch = self._get_branching_variable(self.cplex.variables.get_names(), opt_point)
+            if branch or not self._has_broken_constraint(dual_values):
+                break
+
+        if self._validate_coloring(opt_point) and min_colors < self._min_colors:
+            self._min_colors = min_colors
+            self._min_coloring = self._get_coloring(opt_point)
 
         if not branch:
-            if min_colors < self._min_colors:
-                self._min_colors = min_colors
-                self._min_coloring = self._get_coloring(opt_point)
-
-            # self._branching()
             return
-
 
         branch_variable, branch_index, branch_value = branch
         self.cplex.linear_constraints.add(names=[str(branch_variable)],
@@ -232,4 +252,4 @@ class BranchAndPriceSolver:
         except:
             print("Unexpected error:", sys.exc_info()[0])
 
-        return self._min_colors, self._min_coloring
+        return self._min_colors

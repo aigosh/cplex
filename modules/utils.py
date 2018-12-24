@@ -4,6 +4,7 @@ from cplex._internal._constants import CPX_MAX, CPX_MIN
 from typing import List
 from networkx import coloring, Graph, maximal_independent_set
 from time import time
+from datetime import datetime
 import sys
 
 problem_type = Cplex.problem_type
@@ -117,7 +118,7 @@ class Timer:
     _end_time = None
     _state = TimerState.INITIAL
 
-    def start(self):
+    def start(self, log=False):
         if self._state is TimerState.PENDING:
             raise TimerError('Timer is already running')
         elif self._state is TimerState.FINISHED:
@@ -126,7 +127,10 @@ class Timer:
         self._state = TimerState.PENDING
         self._start_time = time() * 1000
 
-    def stop(self):
+        if log:
+            print("Start: {}".format(datetime.now()))
+
+    def stop(self, log=False):
         if self._state is TimerState.INITIAL:
             raise TimerError('Timer is not started')
         elif self._state is TimerState.FINISHED:
@@ -134,6 +138,10 @@ class Timer:
 
         self._state = TimerState.FINISHED
         self._end_time = time() * 1000
+
+        if log:
+            print("Stop: {}".format(datetime.now()))
+
 
     def reset(self):
         self._state = TimerState.INITIAL
@@ -147,7 +155,7 @@ class Timer:
         return self._end_time - self._start_time
 
 
-def get_independent_sets(graph):
+def get_independent_sets(graph: Graph):
     independent_sets = []
     strategies = [coloring.strategy_largest_first,
                   coloring.strategy_random_sequential,
