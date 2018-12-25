@@ -11,7 +11,7 @@ EPSILON = 0.0001
 
 
 class SENSE(Enum):
-    GREATER = 'G',
+    GREATER = 'G'
     LOWER = 'L'
 
 
@@ -224,38 +224,53 @@ class MaxCliqueSolver:
         if len(independent_sets):
             found_independent_set, found_sum = self.__get_max_independent_set(independent_sets, opt_point)
 
-            if found_sum < 1.0:
-                return
+            if found_sum > 1.0:
+                max_independent_set = maximal_independent_set(self.__graph(), found_independent_set)
+                constraints = self.__get_independent_set_constraints(variables, [max_independent_set])
+                self.__set_constraints(problem, constraints)
 
-            max_independent_set = maximal_independent_set(self.__graph(), found_independent_set)
-            constraints = self.__get_independent_set_constraints(variables, [max_independent_set])
-            self.__set_constraints(problem, constraints)
-            self.__branching(problem, nodes)
-            return
+                try:
+                    problem.solve()
+                except:
+                    return
+
+                opt_point = problem.solution.get_values()
+                solution = problem.solution.get_objective_value()
+
+                upper_bound = floor(solution + EPSILON)
+
+                if upper_bound <= self.__max_clique_len:
+                    return
+
+                if self.__update_max_clique(opt_point):
+                    return
+
+                branching = self.__get_branching_node(nodes, opt_point)
+
+                if branching is None:
+                    return
+
+                branching_node, branch_index, branch_value = branching
 
         variables = problem.variables.get_names()
         variable = variables[branch_index]
 
         problem.linear_constraints.add(names=[str(variable)],
                                        lin_expr=[[[variable], [1.0]]],
-                                       senses=[SENSE.LOWER.value],
-                                       rhs=[0.0])
-        self.__log(variable, '>=', branch_value + 1)
+                                       senses=[SENSE.GREATER.value],
+                                       rhs=[1.0])
 
         self.__branching(problem, nodes)
-
-        if upper_bound <= self.__max_clique_len:
-            return
 
         problem.linear_constraints.delete(str(variable))
 
-        problem.linear_constraints.add(names=[variable],
+        problem.linear_constraints.add(names=[str(variable)],
                                        lin_expr=[[[variable], [1.0]]],
-                                       senses=[SENSE.GREATER.value],
-                                       rhs=[1.0])
-        self.__log(variable, '<=', branch_value)
+                                       senses=[SENSE.LOWER.value],
+                                       rhs=[0.0])
 
         self.__branching(problem, nodes)
+
         problem.linear_constraints.delete(str(variable))
 
     def __get_branching_node(self, nodes, opt_point):
@@ -263,11 +278,15 @@ class MaxCliqueSolver:
 
         :type nodes: list
         """
+        result = None
+
         for node in nodes:
             index = node - 1
             value = opt_point[index]
             if not self.__is_integer(value):
-                return node, index, value
+                if result is None or value > result[2]:
+                    result = node, index, value
+        return result
 
     def __configure_problem(self, problem):
         """

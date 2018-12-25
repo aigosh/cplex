@@ -34,6 +34,7 @@ def clique_heur(G, nodes):
 if __name__ == '__main__':
     modules_dir = path.join(curdir, '..', 'modules')
     sys.path.append(modules_dir)
+    sys.setrecursionlimit(1500)
 
     from dimacs import DIMACS
     from max_clique import MaxCliqueSolver
